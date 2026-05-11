@@ -1,9 +1,31 @@
 import pg from 'pg';
 const { Pool } = pg;
 
+// IMPORTANT: Use DATABASE_URL from environment variables
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+    console.error('❌ DATABASE_URL environment variable is not set!');
+    process.exit(1);
+}
+
+console.log('📡 Connecting to PostgreSQL...');
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    connectionString: databaseUrl,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    // Add connection timeout
+    connectionTimeoutMillis: 10000,
+});
+
+// Test the connection
+pool.connect((err, client, release) => {
+    if (err) {
+        console.error('❌ Database connection error:', err.message);
+        return;
+    }
+    console.log('✅ PostgreSQL connected successfully');
+    release();
 });
 
 // Initialize database tables
@@ -20,6 +42,7 @@ const initDatabase = async () => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        console.log('✅ Users table ready');
         
         // Create projects table
         await pool.query(`
@@ -32,6 +55,7 @@ const initDatabase = async () => {
                 FOREIGN KEY("ownerId") REFERENCES users(id) ON DELETE CASCADE
             )
         `);
+        console.log('✅ Projects table ready');
         
         // Create tasks table
         await pool.query(`
@@ -49,8 +73,7 @@ const initDatabase = async () => {
                 FOREIGN KEY("assignedTo") REFERENCES users(id)
             )
         `);
-        
-        console.log('✅ PostgreSQL tables ready');
+        console.log('✅ Tasks table ready');
         
         // Create default admin account if not exists
         const adminCheck = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
@@ -64,10 +87,11 @@ const initDatabase = async () => {
             console.log('✅ Default admin account created: admin / admin123');
         }
     } catch (error) {
-        console.error('Database initialization error:', error);
+        console.error('Database initialization error:', error.message);
     }
 };
 
+// Run initialization
 initDatabase();
 
 export default pool;
