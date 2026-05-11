@@ -1,138 +1,91 @@
-import db from '../config/database.js';
+import pool from '../config/database.js';
 
 export const getProjects = async (req, res) => {
-  try {
-    let query = 'SELECT * FROM projects';
-    let params = [];
-    
-    // Admin can see all projects
-    // Regular users can see their own projects AND projects created by admin (ownerId = 1)
-    if (req.user.role !== 'admin') {
-      query += ' WHERE ownerId = ? OR ownerId = 1';
-      params = [req.user.id];
+    try {
+        let query = 'SELECT * FROM projects';
+        let params = [];
+        
+        if (req.user.role !== 'admin') {
+            query += ' WHERE "ownerId" = $1 OR "ownerId" = 1';
+            params = [req.user.id];
+        }
+        
+        query += ' ORDER BY created_at DESC';
+        
+        const result = await pool.query(query, params);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get projects error:', error);
+        res.status(500).json({ error: 'Failed to fetch projects' });
     }
-    
-    query += ' ORDER BY created_at DESC';
-    
-    const projects = await new Promise((resolve, reject) => {
-      db.all(query, params, (err, rows) => {
-        if (err) reject(err);
-        resolve(rows);
-      });
-    });
-    
-    res.json(projects);
-  } catch (error) {
-    console.error('Get projects error:', error);
-    res.status(500).json({ error: 'Failed to fetch projects' });
-  }
 };
 
 export const createProject = async (req, res) => {
-  const { name, description } = req.body;
-  
-  if (!name || name.trim().length === 0) {
-    return res.status(400).json({ error: 'Project name is required' });
-  }
-  
-  try {
-    const result = await new Promise((resolve, reject) => {
-      db.run('INSERT INTO projects (name, description, ownerId) VALUES (?, ?, ?)',
-        [name.trim(), description || null, req.user.id],
-        function(err) {
-          if (err) reject(err);
-          resolve({ id: this.lastID });
-        });
-    });
+    const { name, description } = req.body;
     
-    const newProject = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM projects WHERE id = ?', [result.id], (err, row) => {
-        if (err) reject(err);
-        resolve(row);
-      });
-    });
+    if (!name || name.trim().length === 0) {
+        return res.status(400).json({ error: 'Project name is required' });
+    }
     
-    res.status(201).json(newProject);
-  } catch (error) {
-    console.error('Create project error:', error);
-    res.status(500).json({ error: 'Failed to create project' });
-  }
+    try {
+        const result = await pool.query(
+            'INSERT INTO projects (name, description, "ownerId") VALUES ($1, $2, $3) RETURNING *',
+            [name.trim(), description || null, req.user.id]
+        );
+        
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error('Create project error:', error);
+        res.status(500).json({ error: 'Failed to create project' });
+    }
 };
 
 export const updateProject = async (req, res) => {
-  const { id } = req.params;
-  const { name, description } = req.body;
-  
-  try {
-    const project = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM projects WHERE id = ?', [id], (err, row) => {
-        if (err) reject(err);
-        resolve(row);
-      });
-    });
+    const { id } = req.params;
+    const { name, description } = req.body;
     
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
+    try {
+        const project = await pool.query('SELECT * FROM projects WHERE id = $1', [id]);
+        
+        if (project.rows.length === 0) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+        
+        if (project.rows[0].ownerId !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        
+        await pool.query(
+            'UPDATE projects SET name = $1, description = $2 WHERE id = $3',
+            [name, description, id]
+        );
+        
+        res.json({ message: 'Project updated successfully' });
+    } catch (error) {
+        console.error('Update project error:', error);
+        res.status(500).json({ error: 'Failed to update project' });
     }
-    
-    if (project.ownerId !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-    
-    await new Promise((resolve, reject) => {
-      db.run('UPDATE projects SET name = ?, description = ? WHERE id = ?',
-        [name, description, id], (err) => {
-          if (err) reject(err);
-          resolve();
-        });
-    });
-    
-    res.json({ message: 'Project updated successfully' });
-  } catch (error) {
-    console.error('Update project error:', error);
-    res.status(500).json({ error: 'Failed to update project' });
-  }
 };
 
 export const deleteProject = async (req, res) => {
-  const { id } = req.params;
-  
-  try {
-    const project = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM projects WHERE id = ?', [id], (err, row) => {
-        if (err) reject(err);
-        resolve(row);
-      });
-    });
+    const { id } = req.params;
     
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
+    try {
+        const project = await pool.query('SELECT * FROM projects WHERE id = $1', [id]);
+        
+        if (project.rows.length === 0) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+        
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Only admins can delete projects' });
+        }
+        
+        await pool.query('DELETE FROM projects WHERE id = $1', [id]);
+        
+        res.json({ message: 'Project deleted successfully' });
+    } catch (error) {
+        console.error('Delete project error:', error);
+        res.status(500).json({ error: 'Failed to delete project' });
     }
-    
-    // Only admin can delete projects
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Only admins can delete projects' });
-    }
-    
-    // First delete all tasks in this project
-    await new Promise((resolve, reject) => {
-      db.run('DELETE FROM tasks WHERE projectId = ?', [id], (err) => {
-        if (err) reject(err);
-        resolve();
-      });
-    });
-    
-    // Then delete the project
-    await new Promise((resolve, reject) => {
-      db.run('DELETE FROM projects WHERE id = ?', [id], (err) => {
-        if (err) reject(err);
-        resolve();
-      });
-    });
-    
-    res.json({ message: 'Project deleted successfully' });
-  } catch (error) {
-    console.error('Delete project error:', error);
-    res.status(500).json({ error: 'Failed to delete project' });
-  }
 };
