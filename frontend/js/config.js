@@ -1,8 +1,8 @@
 // API Configuration - Update this with your production backend URL
 const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 
-// Replace with your actual Render backend URL when deployed
-const PRODUCTION_API_URL = 'https://taskflow-backend.onrender.com/api';
+// ✅ FIXED: Use your actual Render backend URL
+const PRODUCTION_API_URL = 'https://taskflow-backend-ifdd.onrender.com/api';
 const DEVELOPMENT_API_URL = '/api';
 
 export const API_BASE_URL = isProduction ? PRODUCTION_API_URL : DEVELOPMENT_API_URL;

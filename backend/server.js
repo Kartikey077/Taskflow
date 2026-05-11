@@ -101,3 +101,27 @@ app.listen(PORT, () => {
   console.log(`   User:   (Register your own account)`);
   console.log(`\n💡 Make sure to register a user account first!\n`);
 });
+
+// CORS configuration
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [
+      'https://taskflow-backend-ifdd.onrender.com',
+      'https://taskflow-frontend.vercel.app',
+      process.env.FRONTEND_URL
+    ].filter(Boolean)
+  : ['http://localhost:5000', 'http://localhost:3000'];
+
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+}));
