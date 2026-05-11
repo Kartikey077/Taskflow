@@ -3,10 +3,14 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
 import taskRoutes from './routes/tasks.js';
 import db from './config/database.js';
+import bcrypt from 'bcrypt';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,8 +21,14 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(express.json());
 app.use(cookieParser());
+
+// CORS configuration
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [process.env.FRONTEND_URL, 'https://taskflow-frontend.vercel.app', 'https://taskflow-backend.onrender.com']
+  : ['http://localhost:5000', 'http://localhost:3000'];
+
 app.use(cors({
-  origin: ['http://localhost:5000', 'http://localhost:3000'],
+  origin: allowedOrigins,
   credentials: true
 }));
 
@@ -29,6 +39,11 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/tasks', taskRoutes);
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 // Handle all other routes - serve index.html for client-side routing
 app.get('*', (req, res) => {
@@ -42,7 +57,6 @@ app.use((err, req, res, next) => {
 });
 
 // Create default admin account if it doesn't exist
-import bcrypt from 'bcrypt';
 const createDefaultAdmin = async () => {
   try {
     const adminExists = await new Promise((resolve, reject) => {
@@ -69,14 +83,15 @@ const createDefaultAdmin = async () => {
   }
 };
 
-// Wait for database to be ready then create admin
+// Initialize database and create admin
 setTimeout(() => {
   createDefaultAdmin();
 }, 1000);
 
 app.listen(PORT, () => {
   console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📝 API endpoints:`);
+  console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 API endpoints:`);
   console.log(`   POST /api/auth/register - Register new user`);
   console.log(`   POST /api/auth/login - Login user`);
   console.log(`   GET /api/projects - Get projects`);

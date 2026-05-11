@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: taskflow-backend
+    runtime: node
+    repo: https://github.com/YOUR_USERNAME/taskflow
+    plan: free
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://taskflow-frontend.vercel.app
+    healthCheckPath: /api/health

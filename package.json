@@ -1,0 +1,19 @@
+{
+  "name": "taskflow",
+  "version": "1.0.0",
+  "description": "TaskFlow - Modern Task Management System",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npx serve .",
+    "build": "echo \"Build complete\"",
+    "start": "cd backend && npm start",
+    "postinstall": "cd backend && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

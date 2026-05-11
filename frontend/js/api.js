@@ -1,7 +1,9 @@
-const API_BASE = '/api';
+import { API_BASE_URL } from './config.js';
 
 export const api = async (endpoint, options = {}) => {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    const url = `${API_BASE_URL}${endpoint}`;
+    
+    const response = await fetch(url, {
         ...options,
         credentials: 'include',
         headers: {

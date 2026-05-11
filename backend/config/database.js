@@ -1,11 +1,25 @@
 import sqlite3 from 'sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const db = new sqlite3.Database(join(__dirname, '../database.sqlite'));
+// Create data directory if it doesn't exist
+const dataDir = join(__dirname, '../../data');
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+
+// Use /tmp for production (Render/Railway) or local data directory
+const dbPath = process.env.NODE_ENV === 'production' 
+    ? '/tmp/database.sqlite'  // For Render/Railway (ephemeral)
+    : join(dataDir, 'database.sqlite');
+
+console.log(`📁 Database path: ${dbPath}`);
+
+const db = new sqlite3.Database(dbPath);
 
 db.serialize(() => {
   // Check if users table exists
@@ -18,7 +32,6 @@ db.serialize(() => {
       db.get("PRAGMA table_info(users)", (err, columns) => {
         const hasEmail = columns && columns.some(col => col.name === 'email');
         if (!hasEmail) {
-          // Backup and recreate
           console.log('🔄 Migrating database to add email column...');
           migrateDatabase();
         } else {
@@ -68,7 +81,6 @@ function createTables() {
 }
 
 function migrateDatabase() {
-  // Create temporary table with new schema
   db.run(`CREATE TABLE users_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
@@ -82,7 +94,6 @@ function migrateDatabase() {
       return;
     }
     
-    // Copy data from old table
     db.run(`INSERT INTO users_new (id, username, password, role, created_at)
             SELECT id, username, password, role, created_at FROM users`, (err) => {
       if (err) {
@@ -90,21 +101,18 @@ function migrateDatabase() {
         return;
       }
       
-      // Drop old table
       db.run(`DROP TABLE users`, (err) => {
         if (err) {
           console.error('Drop table error:', err);
           return;
         }
         
-        // Rename new table
         db.run(`ALTER TABLE users_new RENAME TO users`, (err) => {
           if (err) {
             console.error('Rename error:', err);
             return;
           }
           
-          // Set default email for existing users
           db.run(`UPDATE users SET email = username || '@example.com' WHERE email IS NULL`, (err) => {
             if (err) {
               console.error('Email update error:', err);
