@@ -2,37 +2,33 @@ import pg from 'pg';
 import bcrypt from 'bcryptjs';
 const { Pool } = pg;
 
-// IMPORTANT: Use DATABASE_URL from environment variables
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
     console.error('❌ DATABASE_URL environment variable is not set!');
-    process.exit(1);
+} else {
+    console.log('📡 Connecting to PostgreSQL...');
 }
-
-console.log('📡 Connecting to PostgreSQL...');
 
 const pool = new Pool({
     connectionString: databaseUrl,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    // Add connection timeout
     connectionTimeoutMillis: 10000,
 });
 
-// Test the connection
+// Test connection
 pool.connect((err, client, release) => {
     if (err) {
         console.error('❌ Database connection error:', err.message);
-        return;
+    } else {
+        console.log('✅ PostgreSQL connected successfully');
+        release();
+        initDatabase();
     }
-    console.log('✅ PostgreSQL connected successfully');
-    release();
 });
 
-// Initialize database tables
 const initDatabase = async () => {
     try {
-        // Create users table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -45,7 +41,6 @@ const initDatabase = async () => {
         `);
         console.log('✅ Users table ready');
         
-        // Create projects table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS projects (
                 id SERIAL PRIMARY KEY,
@@ -58,7 +53,6 @@ const initDatabase = async () => {
         `);
         console.log('✅ Projects table ready');
         
-        // Create tasks table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS tasks (
                 id SERIAL PRIMARY KEY,
@@ -75,23 +69,9 @@ const initDatabase = async () => {
             )
         `);
         console.log('✅ Tasks table ready');
-        
-        // Create default admin account if not exists
-        const adminCheck = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
-        if (adminCheck.rows.length === 0) {
-            const hashedPassword = await bcrypt.hash('admin123', 10);
-            await pool.query(
-                'INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4)',
-                ['admin', 'admin@taskflow.com', hashedPassword, 'admin']
-            );
-            console.log('✅ Default admin account created: admin / admin123');
-        }
     } catch (error) {
         console.error('Database initialization error:', error.message);
     }
 };
-
-// Run initialization
-initDatabase();
 
 export default pool;

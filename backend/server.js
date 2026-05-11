@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
 import taskRoutes from './routes/tasks.js';
-import db from './config/database.js';
+import pool from './config/database.js';
 import bcrypt from 'bcryptjs';
 
 dotenv.config();
@@ -23,13 +23,25 @@ app.use(express.json());
 app.use(cookieParser());
 
 // CORS configuration
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? [process.env.FRONTEND_URL, 'https://taskflow-frontend.vercel.app', 'https://taskflow-backend.onrender.com']
-  : ['http://localhost:5000', 'http://localhost:3000'];
+const allowedOrigins = [
+    'https://taskflow-backend-ifdd.onrender.com',
+    'https://taskflow-frontend.vercel.app',
+    'http://localhost:5000',
+    'http://localhost:3000'
+];
 
 app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
+    origin: function(origin, callback) {
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('CORS not allowed'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
 }));
 
 // Serve static files from frontend folder
@@ -42,86 +54,52 @@ app.use('/api/tasks', taskRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Handle all other routes - serve index.html for client-side routing
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
+    console.error(err.stack);
+    res.status(500).json({ error: 'Something went wrong!' });
 });
 
-// Create default admin account if it doesn't exist
+// Create default admin account using PostgreSQL
 const createDefaultAdmin = async () => {
-  try {
-    const adminExists = await new Promise((resolve, reject) => {
-      db.get('SELECT id FROM users WHERE username = ?', ['admin'], (err, row) => {
-        if (err) reject(err);
-        resolve(row);
-      });
-    });
-    
-    if (!adminExists) {
-      const hashedPassword = await bcrypt.hash('admin123', 10);
-      await new Promise((resolve, reject) => {
-        db.run('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)',
-          ['admin', 'admin@taskflow.com', hashedPassword, 'admin'],
-          (err) => {
-            if (err) reject(err);
-            resolve();
-          });
-      });
-      console.log('✅ Default admin account created: admin / admin123');
+    try {
+        const adminCheck = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
+        
+        if (adminCheck.rows.length === 0) {
+            const hashedPassword = await bcrypt.hash('admin123', 10);
+            await pool.query(
+                'INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4)',
+                ['admin', 'admin@taskflow.com', hashedPassword, 'admin']
+            );
+            console.log('✅ Default admin account created: admin / admin123');
+        }
+    } catch (error) {
+        console.error('Error creating admin:', error.message);
     }
-  } catch (error) {
-    console.error('Error creating admin:', error);
-  }
 };
 
-// Initialize database and create admin
+// Initialize database and create admin after connection
 setTimeout(() => {
-  createDefaultAdmin();
-}, 1000);
+    createDefaultAdmin();
+}, 2000);
 
 app.listen(PORT, () => {
-  console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 API endpoints:`);
-  console.log(`   POST /api/auth/register - Register new user`);
-  console.log(`   POST /api/auth/login - Login user`);
-  console.log(`   GET /api/projects - Get projects`);
-  console.log(`   POST /api/projects - Create project`);
-  console.log(`\n🔐 Demo Accounts:`);
-  console.log(`   Admin:  admin / admin123`);
-  console.log(`   User:   (Register your own account)`);
-  console.log(`\n💡 Make sure to register a user account first!\n`);
+    console.log(`\n🚀 Server running on http://localhost:${PORT}`);
+    console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔗 API endpoints:`);
+    console.log(`   POST /api/auth/register - Register new user`);
+    console.log(`   POST /api/auth/login - Login user`);
+    console.log(`   GET /api/projects - Get projects`);
+    console.log(`   POST /api/projects - Create project`);
+    console.log(`\n🔐 Demo Accounts:`);
+    console.log(`   Admin:  admin / admin123`);
+    console.log(`\n💡 Your app is live at https://taskflow-backend-ifdd.onrender.com\n`);
 });
-
-// CORS configuration
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? [
-      'https://taskflow-backend-ifdd.onrender.com',
-      'https://taskflow-frontend.vercel.app',
-      process.env.FRONTEND_URL
-    ].filter(Boolean)
-  : ['http://localhost:5000', 'http://localhost:3000'];
-
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
-}));
