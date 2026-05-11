@@ -1,4 +1,5 @@
 import pg from 'pg';
+import bcrypt from 'bcryptjs';
 const { Pool } = pg;
 
 // IMPORTANT: Use DATABASE_URL from environment variables
@@ -78,7 +79,6 @@ const initDatabase = async () => {
         // Create default admin account if not exists
         const adminCheck = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
         if (adminCheck.rows.length === 0) {
-            const bcrypt = await import('bcryptjs');
             const hashedPassword = await bcrypt.hash('admin123', 10);
             await pool.query(
                 'INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4)',
